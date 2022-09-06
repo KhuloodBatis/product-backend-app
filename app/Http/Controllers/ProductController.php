@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
+use Illuminate\Support\Str;
+use Exception;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
@@ -16,7 +18,7 @@ class ProductController extends Controller
      */
     public function index()
     {
-        return Product::select('id','title','decscription','image')->paginate(10);
+        return Product::select('id', 'title', 'description', 'image')->paginate(10);
     }
 
     /**
@@ -38,13 +40,26 @@ class ProductController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'title' =>'required',
-            'decscription' => 'required',
-            'image' => 'required|image'
+            'title' => 'required',
+            'description' => 'required',
+            // 'image' => 'required|image'
+            'image' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
         ]);
+        try {
 
-        $imageName = Str::random().'.'.$request->image->getClientOrginalExtention();
-        Storage::disk('public')->putFileAs('product/image',$request->image,$imageName);
+            $imageName = Str::random() . '.' . $request->image->getClientOriginalExtension();
+            Storage::disk('public')->putFileAs('product/image', $request->image, $imageName);
+            Product::create($request->post() + ['image' => $imageName]);
+            return response()->json([
+                'message' => 'item added successfully'
+            ]);
+
+
+            throw new Exception("Some error message");
+        } catch (Exception $e) {
+
+            return $e->getMessage();
+        };
     }
 
     /**
@@ -55,7 +70,9 @@ class ProductController extends Controller
      */
     public function show(Product $product)
     {
-        //
+        return response()->json([
+            'product' => $product
+        ]);
     }
 
     /**
@@ -78,8 +95,39 @@ class ProductController extends Controller
      */
     public function update(Request $request, Product $product)
     {
-        //
+        $request->validate([
+            'title' => 'required',
+            'description' => 'required',
+            'image' =>'nullable'
+        ]);
+
+        try {
+
+        $product->fill($request->post())->update();
+
+            if ($request->hasFile('image')) {
+                if ($product->image) {
+                    $exist = Storage::disk('public')->exists("product/image{$product->image}");
+                    if ($exist) {
+                        Storage::disk('public')->delete("product/image{$product->image}");
+                    }
+                }
+                $imageName = Str::random() . '.' . $request->image->getClientOriginalExtension();
+                Storage::disk('public')->putFileAs('product/image', $request->image, $imageName);
+                $product->image = $imageName;
+                $product->save();
+            }
+
+
+            return response()->json([
+                'message' => 'item updated successfully'
+            ]);
+            throw new Exception("Some error message");
+            } catch (Exception $e) {
+
+            return $e->getMessage();
     }
+}
 
     /**
      * Remove the specified resource from storage.
@@ -87,8 +135,17 @@ class ProductController extends Controller
      * @param  \App\Models\Product  $product
      * @return \Illuminate\Http\Response
      */
-    public function destroy(Product $product)
+    public function destroy( Product $product)
     {
-        //
+        if ($product->image) {
+            $exist = Storage::disk('public')->exists("product/image{$product->image}");
+            if ($exist) {
+                Storage::disk('public')->delete("product/image{$product->image}");
+            }
+        }
+        $product->delete();
+        return response()->json([
+            'message' => 'item deleted successfully'
+        ]);
     }
 }
